@@ -1,0 +1,10 @@
+dist/
+build/
+release/
+*.spec
+*.log
+__pycache__/
+*.py[cod]
+
+retainpdf-relay-proxy.json
+*.local.json

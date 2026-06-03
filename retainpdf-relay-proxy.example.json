@@ -1,0 +1,20 @@
+{
+  "listen_host": "127.0.0.1",
+  "listen_port": 18181,
+  "upstream_base_url": "https://your-relay.example.com/v1",
+  "upstream_api_key": "sk-your-relay-api-key",
+  "upstream_model": "",
+  "upstream_transport": "auto",
+  "retainpdf_exe_path": "",
+  "max_concurrent": 5,
+  "max_requests_per_minute": 60,
+  "acquire_timeout_seconds": 3600,
+  "upstream_timeout_seconds": 180,
+  "forward_authorization": true,
+  "log_requests": true,
+  "patch_desktop_config": true,
+  "desktop_config_path": "",
+  "retainpdf_api_key": "",
+  "mock_balance": true,
+  "mock_balance_total": "999.00"
+}
