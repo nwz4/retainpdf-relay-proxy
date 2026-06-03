@@ -1545,6 +1545,8 @@ def maybe_launch_app(path: str, *, env_overrides: dict[str, str] | None = None) 
 def run() -> int:
     ensure_background_stdio()
     args = parse_args()
+    if getattr(sys, "frozen", False) and len(sys.argv) == 1:
+        args.configure_and_run = True
     if args.gui or args.configure_and_run:
         gui_config_path = resolved_config_path(args.config)
         gui_result = run_main_config_gui(
