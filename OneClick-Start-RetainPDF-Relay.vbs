@@ -8,7 +8,7 @@ Set shell = CreateObject("WScript.Shell")
 baseDir = fso.GetParentFolderName(WScript.ScriptFullName)
 configPath = fso.BuildPath(baseDir, "retainpdf-relay-proxy.json")
 exePath = fso.BuildPath(baseDir, "dist\RetainPdfRelayProxy.exe")
-scriptPath = fso.BuildPath(baseDir, "retainpdf_relay_proxy.py")
+scriptPath = fso.BuildPath(fso.BuildPath(baseDir, "src"), "retainpdf_relay_proxy.py")
 
 shell.CurrentDirectory = baseDir
 

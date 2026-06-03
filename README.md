@@ -1,44 +1,51 @@
 # RetainPDF Relay Proxy
 
-RetainPDF Relay Proxy 是一个给 RetainPDF 桌面版使用的本地 OpenAI 兼容中转代理。它不修改 RetainPDF 源码，也不修改已打包的 RetainPDF.exe，而是在本机启动一个轻量代理服务，把 RetainPDF 的模型请求转发到你配置的上游中转站。
+<img src="assets/retainpdf-relay-proxy.png" width="96" alt="RetainPDF Relay Proxy 图标">
+
+RetainPDF Relay Proxy 是一个给 RetainPDF 桌面版使用的本地 OpenAI 兼容中转代理。它不会修改 RetainPDF 源码，也不会修改已经打包的 RetainPDF.exe；工具会在本机启动一个轻量 HTTP 服务，把 RetainPDF 的模型请求转发到你配置的上游中转站或 OpenAI 兼容接口。
 
 原软件项目：[wxyhgk/retain-pdf](https://github.com/wxyhgk/retain-pdf)
 
-本项目是独立辅助工具，不代表原项目官方组件。
+本项目是独立辅助工具，不代表 RetainPDF 官方组件。
 
-## 功能简介
+## 功能
 
 - 本地监听 `http://127.0.0.1:18181/v1`。
-- 转发 RetainPDF 的 `/v1/chat/completions` 请求到上游 OpenAI 兼容接口。
-- 提供 `/models` 和 `/user/balance` 本地响应，方便部分隐藏设置的桌面版本通过启动和提交前检查。
-- 支持并发数和 RPM 限制，避免上游中转站超限。
-- 支持固定上游 API Key 和模型名，也可以沿用 RetainPDF 传入的模型。
+- 转发 `/v1/chat/completions` 请求到上游 OpenAI 兼容接口。
+- 本地响应 `/models` 和 `/user/balance`，方便部分隐藏开发者设置的桌面版本通过启动和提交前检查。
+- 支持固定上游 API Key、固定模型名、并发限制和 RPM 限制。
 - 可自动写入 RetainPDF 桌面隐藏配置，并通过本工具启动 RetainPDF。
-- Windows GUI 已做 DPI 感知和现代化界面优化。
+- Windows GUI 支持高 DPI 显示，并使用项目图标。
 
 ## 快速开始
 
-打开配置窗口：
+双击启动：
+
+```text
+OneClick-Start-RetainPDF-Relay.vbs
+```
+
+或打开配置窗口：
 
 ```powershell
 .\Start-RetainPdfRelayProxy.ps1 -Gui
 ```
 
-填写：
+配置窗口中填写：
 
 - 中转站网址：例如 `https://your-relay.example.com/v1`
 - API Key：你的上游中转站密钥
 - 模型名：可选；为空时沿用 RetainPDF 请求中的模型
 - RetainPDF.exe：可选；用于“保存并启动”
 
-配置会保存为 `retainpdf-relay-proxy.json`。该文件包含个人 API Key，默认被 `.gitignore` 忽略，不应提交到仓库。
+保存后会在项目根目录生成 `retainpdf-relay-proxy.json`。该文件包含个人 API Key，已被 `.gitignore` 忽略，不会作为公开文件提交。
 
 ## 示例配置
 
-复制示例配置：
+可以从示例文件复制一份本地配置：
 
 ```powershell
-Copy-Item .\retainpdf-relay-proxy.example.json .\retainpdf-relay-proxy.json
+Copy-Item .\config\retainpdf-relay-proxy.example.json .\retainpdf-relay-proxy.json
 ```
 
 示例内容：
@@ -54,53 +61,53 @@ Copy-Item .\retainpdf-relay-proxy.example.json .\retainpdf-relay-proxy.json
   "retainpdf_exe_path": "",
   "max_concurrent": 5,
   "max_requests_per_minute": 60,
+  "acquire_timeout_seconds": 3600,
+  "upstream_timeout_seconds": 180,
+  "forward_authorization": true,
+  "log_requests": true,
   "patch_desktop_config": true,
-  "mock_balance": true
+  "desktop_config_path": "",
+  "retainpdf_api_key": "",
+  "mock_balance": true,
+  "mock_balance_total": "999.00"
 }
 ```
 
-说明：
-
-- `upstream_transport` 建议保持 `auto`。Windows 下会优先使用系统 `curl.exe` 转发上游请求，减少部分服务对 Python HTTP 指纹的拦截。
-- `max_concurrent` 控制同时转发的请求数。
-- `max_requests_per_minute` 为 `0` 时不限制 RPM。
-- `mock_balance` 用于本地模拟余额检查，只是为了让非官方 DeepSeek 接口的中转服务通过 RetainPDF 的提交前检查。
-
-## 一键启动
-
-双击：
-
-```text
-OneClick-Start-RetainPDF-Relay.vbs
-```
-
-或使用兼容批处理：
-
-```text
-OneClick-Start-RetainPDF-Relay.bat
-```
-
-启动器会优先使用 `dist\RetainPdfRelayProxy.exe`。如果不存在，则回退到 `pythonw.exe retainpdf_relay_proxy.py`。
+`upstream_transport` 建议保持 `auto`。在 Windows 下会优先使用系统 `curl.exe` 转发上游请求；如果不可用，会回退到 Python 内置 HTTP 客户端。
 
 ## RetainPDF 设置
 
-如果需要手动填写 RetainPDF 开发者设置：
+如果需要在 RetainPDF 中手动填写开发者设置：
 
 - Base URL：`http://127.0.0.1:18181/api.deepseek.com/v1`
 - API Key：任意非空值，或你的真实上游 Key
-- Model：你的中转站模型名，除非已在本工具中固定 `upstream_model`
+- Model：你的中转站模型名；如果已在本工具中固定 `upstream_model`，这里可以保持一致
 
 对于隐藏开发者设置的桌面版本，保持 `patch_desktop_config` 为 `true`，并通过本工具启动 RetainPDF。
 
 ## 健康检查
 
-代理启动后可检查：
+代理启动后可以检查：
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:18181/health
 Invoke-RestMethod http://127.0.0.1:18181/user/balance
 Invoke-RestMethod http://127.0.0.1:18181/api.deepseek.com/v1/models
 ```
+
+## 目录结构
+
+```text
+.
+├─ assets/      # 图标和 Windows manifest
+├─ config/      # 示例配置
+├─ scripts/     # 构建和打包脚本
+├─ src/         # Python 主程序
+├─ dist/        # 本地构建产物，默认不提交
+└─ release/     # 本地发布包，默认不提交
+```
+
+根目录保留 `Start-RetainPdfRelayProxy.ps1`、`OneClick-Start-RetainPDF-Relay.vbs` 和 `OneClick-Start-RetainPDF-Relay.bat`，方便直接启动。
 
 ## 构建 Windows exe
 
@@ -122,55 +129,23 @@ python -m pip install pyinstaller
 dist\RetainPdfRelayProxy.exe
 ```
 
-构建脚本会带上 `RetainPdfRelayProxy.exe.manifest`，使 exe 支持 Windows Per-Monitor DPI，减少高分屏下字体模糊或锯齿。
+构建脚本会使用 `assets\retainpdf-relay-proxy.ico` 和 `assets\RetainPdfRelayProxy.exe.manifest`，让 exe 带有图标并支持 Windows Per-Monitor DPI。
 
-## 发布打包
-
-生成干净发布包：
+## 生成发布包
 
 ```powershell
 .\Package-Release.ps1 -Version 0.1.0
 ```
 
-如果希望同时构建 exe：
+如需同时构建 exe：
 
 ```powershell
 .\Package-Release.ps1 -Version 0.1.0 -BuildExe
 ```
 
-发布包会排除：
+发布包采用白名单复制，只包含公开源码、启动脚本、示例配置、图标、README 和许可证；不会包含本地 `retainpdf-relay-proxy.json`、日志、构建缓存或个人路径。
 
-- `retainpdf-relay-proxy.json`
-- `*.log`
-- `dist\build`
-- `*.spec`
-- `__pycache__`
-- 其他本地配置文件
-
-请只发布 `release\retainpdf-relay-proxy-版本号.zip`，不要上传个人配置和日志。
-
-## GitHub 开源建议
-
-建议新建独立仓库，例如：
-
-```text
-retainpdf-relay-proxy
-```
-
-初始化并提交：
-
-```powershell
-git init
-git add .
-git commit -m "Initial open-source release"
-git branch -M main
-git remote add origin https://github.com/<your-name>/retainpdf-relay-proxy.git
-git push -u origin main
-```
-
-发布 Release 时上传 `Package-Release.ps1` 生成的 zip 包。
-
-## 安全提醒
+## 安全提示
 
 - 不要提交 `retainpdf-relay-proxy.json`。
 - 不要提交真实 API Key、真实中转站地址、本机软件路径或日志。

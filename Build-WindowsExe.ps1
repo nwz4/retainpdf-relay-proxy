@@ -1,29 +1,14 @@
 param(
-  [string]$OutputDir = "$PSScriptRoot\dist"
+  [string]$OutputDir = ""
 )
 
 $ErrorActionPreference = "Stop"
-$Script = Join-Path $PSScriptRoot "retainpdf_relay_proxy.py"
-$Manifest = Join-Path $PSScriptRoot "RetainPdfRelayProxy.exe.manifest"
-
-if (-not (Test-Path -LiteralPath $Script)) {
-  throw "Proxy script not found: $Script"
-}
-if (-not (Test-Path -LiteralPath $Manifest)) {
-  throw "Manifest not found: $Manifest"
+$Args = @{}
+if ($OutputDir) {
+  $Args["OutputDir"] = $OutputDir
 }
 
-$PyInstaller = python -m PyInstaller --version 2>$null
-if (-not $?) {
-  throw "PyInstaller is not installed. Install it with: python -m pip install pyinstaller"
+& (Join-Path $PSScriptRoot "scripts\Build-WindowsExe.ps1") @Args
+if ($LASTEXITCODE -ne 0) {
+  exit $LASTEXITCODE
 }
-
-python -m PyInstaller `
-  --onefile `
-  --noconsole `
-  --name RetainPdfRelayProxy `
-  --manifest $Manifest `
-  --distpath $OutputDir `
-  --workpath (Join-Path $OutputDir "build") `
-  --specpath $OutputDir `
-  $Script

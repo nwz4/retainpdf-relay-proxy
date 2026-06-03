@@ -4,7 +4,7 @@ setlocal
 cd /d "%~dp0"
 
 set "CONFIG=%~dp0retainpdf-relay-proxy.json"
-set "SCRIPT=%~dp0retainpdf_relay_proxy.py"
+set "SCRIPT=%~dp0src\retainpdf_relay_proxy.py"
 set "EXE=%~dp0dist\RetainPdfRelayProxy.exe"
 
 if exist "%EXE%" (

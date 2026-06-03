@@ -10,7 +10,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$Script = Join-Path $PSScriptRoot "retainpdf_relay_proxy.py"
+$Script = Join-Path $PSScriptRoot "src\retainpdf_relay_proxy.py"
 
 if (-not (Test-Path -LiteralPath $Script)) {
   throw "Proxy script not found: $Script"

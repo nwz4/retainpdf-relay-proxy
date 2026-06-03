@@ -37,6 +37,8 @@ DEFAULT_UPSTREAM_USER_AGENT = (
 GUI_START_REQUESTED = 70
 WINDOWS_HIDDEN_WINDOW = 0
 LOG_FILE_NAME = "retainpdf-relay-proxy.log"
+ASSETS_DIR_NAME = "assets"
+APP_ICON_PNG_NAME = "retainpdf-relay-proxy.png"
 
 ENV_PREFIX = "RETAINPDF_PROXY_"
 HOP_BY_HOP_HEADERS = {
@@ -54,7 +56,21 @@ HOP_BY_HOP_HEADERS = {
 def application_dir() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
-    return Path(__file__).resolve().parent
+    source_dir = Path(__file__).resolve().parent
+    if source_dir.name == "src":
+        return source_dir.parent
+    return source_dir
+
+
+def resource_base_dir() -> Path:
+    bundle_dir = getattr(sys, "_MEIPASS", "")
+    if getattr(sys, "frozen", False) and bundle_dir:
+        return Path(str(bundle_dir)).resolve()
+    return application_dir()
+
+
+def resource_path(*parts: str) -> Path:
+    return resource_base_dir().joinpath(*parts)
 
 
 def default_log_path() -> Path:
@@ -104,6 +120,20 @@ def configure_tk_font_rendering(root: Any) -> None:
     try:
         pixels_per_inch = float(root.winfo_fpixels("1i"))
         root.tk.call("tk", "scaling", max(1.0, pixels_per_inch / 72.0))
+    except Exception:
+        pass
+
+
+def apply_tk_window_icon(root: Any) -> None:
+    icon_path = resource_path(ASSETS_DIR_NAME, APP_ICON_PNG_NAME)
+    if not icon_path.exists():
+        return
+    try:
+        import tkinter as tk
+
+        icon = tk.PhotoImage(file=str(icon_path))
+        root.iconphoto(True, icon)
+        root._retainpdf_relay_icon = icon
     except Exception:
         pass
 
@@ -307,7 +337,7 @@ def load_json_config(path: Path | None) -> dict[str, Any]:
 def default_config_path() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().with_name("retainpdf-relay-proxy.json")
-    return Path(__file__).resolve().with_name("retainpdf-relay-proxy.json")
+    return application_dir() / "retainpdf-relay-proxy.json"
 
 
 def resolved_config_path(raw_path: str = "") -> Path:
@@ -660,327 +690,6 @@ def config_payload_from_gui_values(
     return payload
 
 
-def run_gui(config_path: Path) -> int:
-    try:
-        import tkinter as tk
-        from tkinter import filedialog
-        from tkinter import messagebox
-        from tkinter import ttk
-    except Exception as exc:
-        print(f"GUI is not available: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return 4
-
-    try:
-        existing = load_json_config(config_path)
-    except Exception as exc:
-        existing = {}
-        load_error = f"Failed to load config: {type(exc).__name__}: {exc}"
-    else:
-        load_error = ""
-
-    initial = build_config(config_path if config_path.exists() and not load_error else None)
-
-    enable_windows_dpi_awareness()
-    root = tk.Tk()
-    configure_tk_font_rendering(root)
-    root.title("RetainPDF 中转站配置")
-    root.geometry("640x360")
-    root.minsize(580, 320)
-
-    upstream_base_url_var = tk.StringVar(value=initial.upstream_base_url)
-    upstream_api_key_var = tk.StringVar(value=initial.upstream_api_key)
-    upstream_model_var = tk.StringVar(value=initial.upstream_model)
-    max_concurrent_var = tk.StringVar(value=str(initial.max_concurrent))
-    max_requests_per_minute_var = tk.StringVar(value=str(initial.max_requests_per_minute))
-    retainpdf_exe_var = tk.StringVar(value=str(existing.get("retainpdf_exe_path", "") or ""))
-    patch_desktop_config_var = tk.BooleanVar(value=initial.patch_desktop_config)
-    mock_balance_var = tk.BooleanVar(value=initial.mock_balance)
-    show_key_var = tk.BooleanVar(value=False)
-    status_var = tk.StringVar(value=load_error or f"配置文件: {config_path}")
-
-    root.columnconfigure(0, weight=1)
-    frame = ttk.Frame(root, padding=14)
-    frame.grid(row=0, column=0, sticky="nsew")
-    frame.columnconfigure(1, weight=1)
-
-    def add_label(row: int, text: str) -> None:
-        ttk.Label(frame, text=text).grid(row=row, column=0, sticky="w", padx=(0, 10), pady=6)
-
-    add_label(0, "中转站 Base URL")
-    ttk.Entry(frame, textvariable=upstream_base_url_var).grid(row=0, column=1, columnspan=2, sticky="ew", pady=6)
-
-    add_label(1, "API Key")
-    api_key_entry = ttk.Entry(frame, textvariable=upstream_api_key_var, show="*")
-    api_key_entry.grid(row=1, column=1, sticky="ew", pady=6)
-
-    def toggle_key_visibility() -> None:
-        api_key_entry.configure(show="" if show_key_var.get() else "*")
-
-    ttk.Checkbutton(
-        frame,
-        text="显示",
-        variable=show_key_var,
-        command=toggle_key_visibility,
-    ).grid(row=1, column=2, sticky="w", padx=(8, 0), pady=6)
-
-    add_label(2, "模型名 可选")
-    ttk.Entry(frame, textvariable=upstream_model_var).grid(row=2, column=1, columnspan=2, sticky="ew", pady=6)
-
-    add_label(3, "RetainPDF.exe 可选")
-    ttk.Entry(frame, textvariable=retainpdf_exe_var).grid(row=3, column=1, sticky="ew", pady=6)
-
-    def browse_retainpdf() -> None:
-        selected = filedialog.askopenfilename(
-            title="选择 RetainPDF.exe",
-            filetypes=[("RetainPDF.exe", "RetainPDF.exe"), ("Executable", "*.exe"), ("All files", "*.*")],
-        )
-        if selected:
-            retainpdf_exe_var.set(selected)
-
-    ttk.Button(frame, text="浏览", command=browse_retainpdf).grid(row=3, column=2, sticky="ew", padx=(8, 0), pady=6)
-
-    add_label(4, "并发上限")
-    ttk.Entry(frame, textvariable=max_concurrent_var, width=10).grid(row=4, column=1, sticky="w", pady=6)
-
-    add_label(5, "RPM limit (0 = off)")
-    ttk.Entry(frame, textvariable=max_requests_per_minute_var, width=10).grid(row=5, column=1, sticky="w", pady=6)
-
-    ttk.Checkbutton(
-        frame,
-        text="写入 RetainPDF 隐藏配置",
-        variable=patch_desktop_config_var,
-    ).grid(row=6, column=1, columnspan=2, sticky="w", pady=6)
-    ttk.Checkbutton(
-        frame,
-        text="启用本地余额响应",
-        variable=mock_balance_var,
-    ).grid(row=7, column=1, columnspan=2, sticky="w", pady=6)
-
-    status_label = ttk.Label(frame, textvariable=status_var, foreground="#555", wraplength=560)
-    status_label.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(10, 4))
-
-    buttons = ttk.Frame(frame)
-    buttons.grid(row=9, column=0, columnspan=3, sticky="e", pady=(12, 0))
-
-    def current_payload() -> dict[str, Any] | None:
-        if not upstream_base_url_var.get().strip():
-            messagebox.showerror("配置错误", "请填写中转站 Base URL。")
-            return None
-        return config_payload_from_gui_values(
-            existing=existing,
-            upstream_base_url=upstream_base_url_var.get(),
-            upstream_api_key=upstream_api_key_var.get(),
-            upstream_model=upstream_model_var.get(),
-            retainpdf_exe_path=retainpdf_exe_var.get(),
-            max_concurrent=max_concurrent_var.get(),
-            max_requests_per_minute=max_requests_per_minute_var.get(),
-            patch_desktop_config=patch_desktop_config_var.get(),
-            mock_balance=mock_balance_var.get(),
-        )
-
-    def save_config() -> bool:
-        payload = current_payload()
-        if payload is None:
-            return False
-        try:
-            save_json_config(config_path, payload)
-        except Exception as exc:
-            messagebox.showerror("保存失败", f"{type(exc).__name__}: {exc}")
-            return False
-        existing.clear()
-        existing.update(payload)
-        status_var.set(f"已保存: {config_path}")
-        return True
-
-    def save_and_start() -> None:
-        if not save_config():
-            return
-        if is_retainpdf_process_running():
-            messagebox.showwarning(
-                "RetainPDF 正在运行",
-                "请先从托盘完全退出 RetainPDF，然后再使用“保存并启动”。",
-            )
-            return
-        try:
-            command = proxy_launch_command(config_path, retainpdf_exe_var.get())
-            launch_background_process(command, cwd=str(config_path.parent))
-        except Exception as exc:
-            messagebox.showerror("启动失败", f"{type(exc).__name__}: {exc}")
-            return
-        status_var.set(f"代理已在后台启动。日志: {default_log_path()}")
-        root.after(600, root.destroy)
-
-    ttk.Button(buttons, text="保存配置", command=save_config).grid(row=0, column=0, padx=(0, 8))
-    ttk.Button(buttons, text="保存并启动", command=save_and_start).grid(row=0, column=1, padx=(0, 8))
-    ttk.Button(buttons, text="关闭", command=root.destroy).grid(row=0, column=2)
-
-    root.mainloop()
-    return 0
-
-
-def run_config_gui(config_path: Path, *, start_in_current_process: bool = False) -> int:
-    try:
-        import tkinter as tk
-        from tkinter import filedialog
-        from tkinter import messagebox
-        from tkinter import ttk
-    except Exception as exc:
-        print(f"GUI is not available: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return 4
-
-    try:
-        existing = load_json_config(config_path)
-    except Exception as exc:
-        existing = {}
-        load_error = f"读取配置失败: {type(exc).__name__}: {exc}"
-    else:
-        load_error = ""
-
-    initial = build_config(config_path if config_path.exists() and not load_error else None)
-    start_requested = False
-
-    enable_windows_dpi_awareness()
-    root = tk.Tk()
-    configure_tk_font_rendering(root)
-    root.title("RetainPDF 中转站配置")
-    root.geometry("700x390")
-    root.minsize(620, 340)
-
-    upstream_base_url_var = tk.StringVar(value=initial.upstream_base_url)
-    upstream_api_key_var = tk.StringVar(value=initial.upstream_api_key)
-    upstream_model_var = tk.StringVar(value=initial.upstream_model)
-    max_concurrent_var = tk.StringVar(value=str(initial.max_concurrent))
-    max_requests_per_minute_var = tk.StringVar(value=str(initial.max_requests_per_minute))
-    retainpdf_exe_var = tk.StringVar(value=initial.retainpdf_exe_path)
-    patch_desktop_config_var = tk.BooleanVar(value=initial.patch_desktop_config)
-    mock_balance_var = tk.BooleanVar(value=initial.mock_balance)
-    show_key_var = tk.BooleanVar(value=False)
-    status_var = tk.StringVar(value=load_error or f"配置文件: {config_path}")
-
-    root.columnconfigure(0, weight=1)
-    frame = ttk.Frame(root, padding=14)
-    frame.grid(row=0, column=0, sticky="nsew")
-    frame.columnconfigure(1, weight=1)
-
-    def add_label(row: int, text: str) -> None:
-        ttk.Label(frame, text=text).grid(row=row, column=0, sticky="w", padx=(0, 10), pady=6)
-
-    add_label(0, "中转站 Base URL")
-    ttk.Entry(frame, textvariable=upstream_base_url_var).grid(row=0, column=1, columnspan=2, sticky="ew", pady=6)
-
-    add_label(1, "API Key")
-    api_key_entry = ttk.Entry(frame, textvariable=upstream_api_key_var, show="*")
-    api_key_entry.grid(row=1, column=1, sticky="ew", pady=6)
-
-    def toggle_key_visibility() -> None:
-        api_key_entry.configure(show="" if show_key_var.get() else "*")
-
-    ttk.Checkbutton(
-        frame,
-        text="显示",
-        variable=show_key_var,
-        command=toggle_key_visibility,
-    ).grid(row=1, column=2, sticky="w", padx=(8, 0), pady=6)
-
-    add_label(2, "模型名(可选)")
-    ttk.Entry(frame, textvariable=upstream_model_var).grid(row=2, column=1, columnspan=2, sticky="ew", pady=6)
-
-    add_label(3, "RetainPDF.exe")
-    ttk.Entry(frame, textvariable=retainpdf_exe_var).grid(row=3, column=1, sticky="ew", pady=6)
-
-    def browse_retainpdf() -> None:
-        selected = filedialog.askopenfilename(
-            title="选择 RetainPDF.exe",
-            filetypes=[("RetainPDF.exe", "RetainPDF.exe"), ("Executable", "*.exe"), ("All files", "*.*")],
-        )
-        if selected:
-            retainpdf_exe_var.set(selected)
-
-    ttk.Button(frame, text="浏览", command=browse_retainpdf).grid(row=3, column=2, sticky="ew", padx=(8, 0), pady=6)
-
-    add_label(4, "并发上限")
-    ttk.Entry(frame, textvariable=max_concurrent_var, width=10).grid(row=4, column=1, sticky="w", pady=6)
-
-    add_label(5, "RPM limit (0 = off)")
-    ttk.Entry(frame, textvariable=max_requests_per_minute_var, width=10).grid(row=5, column=1, sticky="w", pady=6)
-
-    ttk.Checkbutton(
-        frame,
-        text="写入 RetainPDF 隐藏配置",
-        variable=patch_desktop_config_var,
-    ).grid(row=5, column=1, columnspan=2, sticky="w", pady=6)
-    ttk.Checkbutton(
-        frame,
-        text="启用本地余额检测响应",
-        variable=mock_balance_var,
-    ).grid(row=6, column=1, columnspan=2, sticky="w", pady=6)
-
-    status_label = ttk.Label(frame, textvariable=status_var, foreground="#555", wraplength=640)
-    status_label.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(10, 4))
-
-    buttons = ttk.Frame(frame)
-    buttons.grid(row=8, column=0, columnspan=3, sticky="e", pady=(12, 0))
-
-    def current_payload() -> dict[str, Any] | None:
-        if not upstream_base_url_var.get().strip():
-            messagebox.showerror("配置错误", "请填写中转站 Base URL。")
-            return None
-        return config_payload_from_gui_values(
-            existing=existing,
-            upstream_base_url=upstream_base_url_var.get(),
-            upstream_api_key=upstream_api_key_var.get(),
-            upstream_model=upstream_model_var.get(),
-            retainpdf_exe_path=retainpdf_exe_var.get(),
-            max_concurrent=max_concurrent_var.get(),
-            patch_desktop_config=patch_desktop_config_var.get(),
-            mock_balance=mock_balance_var.get(),
-        )
-
-    def save_config() -> bool:
-        payload = current_payload()
-        if payload is None:
-            return False
-        try:
-            save_json_config(config_path, payload)
-        except Exception as exc:
-            messagebox.showerror("保存失败", f"{type(exc).__name__}: {exc}")
-            return False
-        existing.clear()
-        existing.update(payload)
-        status_var.set(f"已保存: {config_path}")
-        return True
-
-    def save_and_start() -> None:
-        nonlocal start_requested
-        if not save_config():
-            return
-        if is_retainpdf_process_running():
-            messagebox.showwarning(
-                "RetainPDF 正在运行",
-                "请先从托盘完全退出 RetainPDF，然后再使用“保存并启动”。",
-            )
-            return
-        if start_in_current_process:
-            start_requested = True
-            root.destroy()
-            return
-        try:
-            command = proxy_launch_command(config_path, retainpdf_exe_var.get())
-            launch_background_process(command, cwd=str(config_path.parent))
-        except Exception as exc:
-            messagebox.showerror("启动失败", f"{type(exc).__name__}: {exc}")
-            return
-        status_var.set(f"代理已在后台启动。日志: {default_log_path()}")
-        root.after(600, root.destroy)
-
-    ttk.Button(buttons, text="保存配置", command=save_config).grid(row=0, column=0, padx=(0, 8))
-    ttk.Button(buttons, text="保存并启动", command=save_and_start).grid(row=0, column=1, padx=(0, 8))
-    ttk.Button(buttons, text="关闭", command=root.destroy).grid(row=0, column=2)
-
-    root.mainloop()
-    return GUI_START_REQUESTED if start_requested else 0
-
-
 def run_main_config_gui(config_path: Path, *, start_in_current_process: bool = False) -> int:
     try:
         import tkinter as tk
@@ -1004,6 +713,7 @@ def run_main_config_gui(config_path: Path, *, start_in_current_process: bool = F
 
     enable_windows_dpi_awareness()
     root = tk.Tk()
+    apply_tk_window_icon(root)
     configure_tk_font_rendering(root)
     root.title("RetainPDF 中转站助手")
     root.geometry("960x680")
